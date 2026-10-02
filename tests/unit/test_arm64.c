@@ -956,6 +956,12 @@ static void test_arm64_ushl_2d(void)
         uint64_t shift[2];
         uint64_t expected[2];
     } cases[] = {
+        {{UINT64_C(0x00000000001234d0), UINT64_C(0x00000000005678c8)},
+         {UINT64_C(0x000000000000adf5), UINT64_C(0x00000000000000ad)}},
+        {{UINT64_C(0x00000000001234ff), UINT64_C(0x0000000089abcdc1)},
+         {UINT64_C(0x56fad7150bc9b988), UINT64_C(0x0000000000000001)}},
+        {{UINT64_C(0x00000000abcdefc0), UINT64_C(0x0000000000123480)},
+         {UINT64_C(0x0000000000000000), UINT64_C(0x0000000000000000)}},
         {{UINT64_C(0xffffffffffffffd0), UINT64_C(0xffffffffffffffc8)},
          {UINT64_C(0x000000000000adf5), UINT64_C(0x00000000000000ad)}},
         {{UINT64_C(0x0000000000000000), UINT64_C(0x0000000000000001)},
@@ -998,6 +1004,41 @@ static void test_arm64_ushl_2d(void)
     OK(uc_close(uc));
 }
 
+static void test_arm64_ushl_4s(void)
+{
+    uc_engine *uc;
+    char code[] = "\x61\x44\xa1\x6e"; // ushl v1.4s, v3.4s, v1.4s
+    uint32_t input[4] = {0x89abcdef, 0x10203040, 0xff234567, 0x87654321};
+    uint32_t output[4];
+    const struct {
+        uint32_t shift[4];
+        uint32_t expected[4];
+    } cases[] = {
+        {{0x001234ff, 0x005678f8, 0xabcdefe8, 0x876543e0},
+         {0x44d5e6f7, 0x00102030, 0x000000ff, 0x00000000}},
+        {{0x00123400, 0x00567801, 0x00abcd1f, 0x00dead20},
+         {0x89abcdef, 0x20406080, 0x80000000, 0x00000000}},
+    };
+
+    uc_common_setup(&uc, UC_ARCH_ARM64, UC_MODE_ARM, code, sizeof(code) - 1,
+                    UC_CPU_ARM64_A72);
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        OK(uc_reg_write(uc, UC_ARM64_REG_Q3, input));
+        OK(uc_reg_write(uc, UC_ARM64_REG_Q1, cases[i].shift));
+        OK(uc_emu_start(uc, code_start, code_start + sizeof(code) - 1, 0, 1));
+        OK(uc_reg_read(uc, UC_ARM64_REG_Q1, output));
+
+        for (size_t lane = 0; lane < 4; lane++) {
+            TEST_CHECK(output[lane] == cases[i].expected[lane]);
+            TEST_MSG("case=%zu lane=%zu: got 0x%08x, expected 0x%08x", i,
+                     lane, output[lane], cases[i].expected[lane]);
+        }
+    }
+
+    OK(uc_close(uc));
+}
+
 TEST_LIST = {{"test_arm64_until", test_arm64_until},
              {"test_arm64_code_patching", test_arm64_code_patching},
              {"test_arm64_code_patching_count", test_arm64_code_patching_count},
@@ -1020,4 +1061,5 @@ TEST_LIST = {{"test_arm64_until", test_arm64_until},
              {"test_arm64_pauth_vanilla", test_arm64_pauth_vanilla},
              {"test_arm64_pauth_ctl", test_arm64_pauth_ctl},
              {"test_arm64_ushl_2d", test_arm64_ushl_2d},
+             {"test_arm64_ushl_4s", test_arm64_ushl_4s},
              {NULL, NULL}};
